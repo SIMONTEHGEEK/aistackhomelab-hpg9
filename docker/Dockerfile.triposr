@@ -27,7 +27,7 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip3 install --no-cache-dir \
     torch torchvision --index-url https://download.pytorch.org/whl/cu124
 RUN pip3 install --no-cache-dir -r requirements.txt
-RUN pip3 install --no-cache-dir gradio
+RUN pip3 install --no-cache-dir gradio onnxruntime-gpu
 
 # Create output/input directories
 RUN mkdir -p /app/output /app/input
