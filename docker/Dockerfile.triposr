@@ -27,7 +27,7 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel
 RUN pip3 install --no-cache-dir \
     torch torchvision --index-url https://download.pytorch.org/whl/cu124
 RUN pip3 install --no-cache-dir -r requirements.txt
-RUN pip3 install --no-cache-dir "gradio>=4.44,<5" onnxruntime-gpu
+RUN pip3 install --no-cache-dir "gradio>=4.44,<5" "huggingface_hub<0.27" onnxruntime-gpu
 
 # Tell Gradio to bind to all interfaces inside the container
 ENV GRADIO_SERVER_NAME=0.0.0.0
