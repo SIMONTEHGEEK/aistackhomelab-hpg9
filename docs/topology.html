@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Home Server — Infrastructure Topology</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0d1117;
+            color: #e6edf3;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 32px 16px;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #58a6ff;
+        }
+        .subtitle {
+            font-size: 14px;
+            color: #8b949e;
+            margin-bottom: 32px;
+        }
+        #diagram-container {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 1400px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+        .mermaid { width: 100%; }
+        .controls {
+            margin-top: 24px;
+            display: flex;
+            gap: 12px;
+        }
+        button {
+            background: #238636;
+            color: #fff;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        button:hover { background: #2ea043; }
+        button.secondary {
+            background: #30363d;
+            color: #c9d1d9;
+        }
+        button.secondary:hover { background: #484f58; }
+        .footer {
+            margin-top: 24px;
+            font-size: 12px;
+            color: #484f58;
+        }
+    </style>
+</head>
+<body>
+    <h1>AI Home Server — Infrastructure Topology</h1>
+    <p class="subtitle">HP DL380 G9 | RTX A5000 24GB | Proxmox VE → Ubuntu 24.04 VM → Docker Compose</p>
+
+    <div id="diagram-container">
+        <pre class="mermaid">
+graph TB
+    USER["👤 User&lt;br/&gt;Browser / Mobile"]
+
+    subgraph PROXMOX["🖥️ HP DL380 G9 — Proxmox VE Host&lt;br/&gt;128 GB RAM | 13 TB NVMe | Xeon E5-2600"]
+        subgraph VM["🐧 Ubuntu 24.04 LTS VM — ai-server&lt;br/&gt;16 vCPUs | 96 GB RAM | 500 GB Disk"]
+            subgraph NVIDIA["🟢 NVIDIA Runtime&lt;br/&gt;Driver 550+ | CUDA 12.x | Container Toolkit"]
+                subgraph DOCKER["🐳 Docker Compose Stack"]
+
+                    CADDY["🔒 Caddy&lt;br/&gt;Reverse Proxy&lt;br/&gt;:80 / :443&lt;br/&gt;Auto TLS"]
+
+                    subgraph LLM["💬 Chat &amp; LLM"]
+                        OLLAMA["🦙 Ollama&lt;br/&gt;Llama 3.1 / Mistral&lt;br/&gt;:11434&lt;br/&gt;GPU: ~10 GB (8B+KV+ctx)&lt;br/&gt;~14 GB (14B+KV+ctx)"]
+                        OPENWEBUI["🌐 Open WebUI&lt;br/&gt;Chat + Voice + RAG&lt;br/&gt;:3000"]
+                    end
+
+                    subgraph IMG["🎨 Image Generation"]
+                        COMFYUI["🖼️ ComfyUI&lt;br/&gt;SDXL ~8 GB / Flux ~16 GB&lt;br/&gt;(weights+VAE+CLIP+sampling)&lt;br/&gt;:8188"]
+                    end
+
+                    subgraph THREED["🧊 3D Generation"]
+                        TRIPOSR["📐 TripoSR&lt;br/&gt;Image → 3D Mesh&lt;br/&gt;:8090&lt;br/&gt;GPU: ~5 GB (weights+working mem)"]
+                    end
+
+                    subgraph VOICE["🎙️ Voice Pipeline"]
+                        WHISPER["👂 Faster-Whisper&lt;br/&gt;Speech-to-Text&lt;br/&gt;:10300&lt;br/&gt;GPU: ~2 GB (weights+buffers)"]
+                        PIPER["🔊 Piper TTS&lt;br/&gt;Text-to-Speech&lt;br/&gt;:10200&lt;br/&gt;CPU only"]
+                    end
+
+                    subgraph MGMT["⚙️ Management"]
+                        PORTAINER["📊 Portainer&lt;br/&gt;Docker GUI :9443"]
+                        WATCHTOWER["🔄 Watchtower&lt;br/&gt;Auto Updates"]
+                    end
+                end
+            end
+
+            subgraph VRAM["📊 RTX A5000 VRAM Budget — 24 GB (weights + KV cache + working mem)"]
+                V1["✅ Chat: Ollama 8B + Whisper = ~12 GB"]
+                V2["✅ Chat + SDXL: 8B + SDXL + Whisper = ~20 GB"]
+                V3["✅ Chat + 3D: 8B + TripoSR + Whisper = ~17 GB"]
+                V4["⚠️ Chat + SDXL (14B): ~22 GB — tight"]
+                V5["❌ Chat + Flux: 8B + Flux = ~26 GB — won't fit"]
+            end
+        end
+    end
+
+    USER -->|"HTTPS :443"| CADDY
+    CADDY -->|"/"| OPENWEBUI
+    CADDY -->|"/comfy"| COMFYUI
+    CADDY -->|"/3d"| TRIPOSR
+    USER -->|":9443"| PORTAINER
+
+    OPENWEBUI -->|"LLM API"| OLLAMA
+    OPENWEBUI -->|"STT"| WHISPER
+    OPENWEBUI -->|"TTS"| PIPER
+    OPENWEBUI -.->|"Img Gen"| COMFYUI
+
+    style PROXMOX fill:#1a1a2e,stroke:#e94560,color:#eee,stroke-width:3px
+    style VM fill:#16213e,stroke:#0f3460,color:#eee,stroke-width:2px
+    style NVIDIA fill:#4a7c2e,stroke:#76b900,color:#fff,stroke-width:2px
+    style DOCKER fill:#0f3460,stroke:#533483,color:#eee,stroke-width:2px
+    style LLM fill:#1b4332,stroke:#40916c,color:#fff
+    style IMG fill:#3d2645,stroke:#832161,color:#fff
+    style THREED fill:#1b3a4b,stroke:#065a82,color:#fff
+    style VOICE fill:#3a2e39,stroke:#b07d62,color:#fff
+    style MGMT fill:#2d2d2d,stroke:#666,color:#ccc
+    style VRAM fill:#2a1a0e,stroke:#f0a500,color:#ffd,stroke-width:2px
+    style USER fill:#e94560,stroke:#fff,color:#fff,stroke-width:2px
+    style CADDY fill:#533483,stroke:#e94560,color:#fff
+    style OLLAMA fill:#2d6a4f,stroke:#40916c,color:#fff
+    style OPENWEBUI fill:#2d6a4f,stroke:#40916c,color:#fff
+    style COMFYUI fill:#4a1942,stroke:#832161,color:#fff
+    style TRIPOSR fill:#14384b,stroke:#065a82,color:#fff
+    style WHISPER fill:#3a2e39,stroke:#b07d62,color:#fff
+    style PIPER fill:#3a2e39,stroke:#b07d62,color:#fff
+    style PORTAINER fill:#333,stroke:#888,color:#ccc
+    style WATCHTOWER fill:#333,stroke:#888,color:#ccc
+    style V1 fill:#1b4332,stroke:#40916c,color:#fff
+    style V2 fill:#1b4332,stroke:#40916c,color:#fff
+    style V3 fill:#1b4332,stroke:#40916c,color:#fff
+    style V4 fill:#3d2645,stroke:#f0a500,color:#ffd
+    style V5 fill:#4a1a1a,stroke:#e94560,color:#faa
+        </pre>
+    </div>
+
+    <div class="controls">
+        <button onclick="savePNG()">💾 Save as PNG</button>
+        <button class="secondary" onclick="saveSVG()">📄 Save as SVG</button>
+    </div>
+
+    <p class="footer">Open this file in any browser. Click "Save as PNG" to export.</p>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                darkMode: true,
+                background: '#161b22',
+                primaryColor: '#238636',
+                fontFamily: 'Segoe UI, system-ui, sans-serif',
+                fontSize: '14px'
+            },
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+
+        function savePNG() {
+            const svg = document.querySelector('#diagram-container svg');
+            if (!svg) { alert('Diagram not rendered yet. Wait a moment and try again.'); return; }
+
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+
+            const img = new Image();
+            img.onload = function () {
+                const scale = 2; // 2x resolution for crisp output
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth * scale;
+                canvas.height = img.naturalHeight * scale;
+
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#0d1117';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.scale(scale, scale);
+                ctx.drawImage(img, 0, 0);
+
+                const link = document.createElement('a');
+                link.download = 'ai-stack-topology.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        }
+
+        function saveSVG() {
+            const svg = document.querySelector('#diagram-container svg');
+            if (!svg) { alert('Diagram not rendered yet. Wait a moment and try again.'); return; }
+
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const link = document.createElement('a');
+            link.download = 'ai-stack-topology.svg';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,220 @@
+# =============================================================================
+# AI Stack — Docker Compose
+# HP DL380 G9 | RTX A5000 24GB | Ubuntu 24.04
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Ollama — LLM Inference Engine
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ${DATA_DIR}/ollama:/root/.ollama
+    environment:
+      - OLLAMA_HOST=${OLLAMA_HOST}
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE}
+      - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION}
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ai-net
+
+  # ---------------------------------------------------------------------------
+  # Open WebUI — Chat Interface + Voice + RAG
+  # ---------------------------------------------------------------------------
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    volumes:
+      - ${DATA_DIR}/open-webui:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
+      - WEBUI_AUTH=${WEBUI_AUTH}
+      - ENABLE_SIGNUP=${ENABLE_SIGNUP}
+      - ENABLE_IMAGE_GENERATION=${ENABLE_IMAGE_GENERATION}
+      - IMAGE_GENERATION_ENGINE=${IMAGE_GENERATION_ENGINE}
+      - COMFYUI_BASE_URL=${COMFYUI_BASE_URL}
+      - AUDIO_STT_ENGINE=${AUDIO_STT_ENGINE}
+      - AUDIO_STT_OPENAI_API_BASE_URL=${AUDIO_STT_OPENAI_API_BASE_URL}
+      - AUDIO_STT_OPENAI_API_KEY=${AUDIO_STT_OPENAI_API_KEY}
+      - AUDIO_TTS_ENGINE=${AUDIO_TTS_ENGINE}
+      - AUDIO_TTS_OPENAI_API_BASE_URL=${AUDIO_TTS_OPENAI_API_BASE_URL}
+      - AUDIO_TTS_OPENAI_API_KEY=${AUDIO_TTS_OPENAI_API_KEY}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - ai-net
+
+  # ---------------------------------------------------------------------------
+  # ComfyUI — Image Generation (Stable Diffusion)
+  # ---------------------------------------------------------------------------
+  comfyui:
+    image: ghcr.io/ai-dock/comfyui:latest-cuda
+    container_name: comfyui
+    restart: unless-stopped
+    ports:
+      - "8188:8188"
+    volumes:
+      - ${DATA_DIR}/comfyui/models:/opt/ComfyUI/models
+      - ${DATA_DIR}/comfyui/output:/opt/ComfyUI/output
+      - ${DATA_DIR}/comfyui/input:/opt/ComfyUI/input
+      - ${DATA_DIR}/comfyui/custom_nodes:/opt/ComfyUI/custom_nodes
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CLI_ARGS=--listen 0.0.0.0 --port 8188
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-net
+
+  # ---------------------------------------------------------------------------
+  # TripoSR — Image to 3D Model Generation
+  # ---------------------------------------------------------------------------
+  triposr:
+    build:
+      context: .
+      dockerfile: Dockerfile.triposr
+    container_name: triposr
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ${DATA_DIR}/triposr/output:/app/output
+      - ${DATA_DIR}/triposr/input:/app/input
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-net
+
+  # ---------------------------------------------------------------------------
+  # Faster-Whisper — Speech-to-Text
+  # ---------------------------------------------------------------------------
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cuda
+    container_name: whisper
+    restart: unless-stopped
+    ports:
+      - "10300:8000"
+    environment:
+      - WHISPER__MODEL=${WHISPER_MODEL}
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ${DATA_DIR}/whisper:/root/.cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-net
+
+  # ---------------------------------------------------------------------------
+  # Piper TTS — Text-to-Speech
+  # ---------------------------------------------------------------------------
+  piper:
+    image: ghcr.io/matatonic/openedai-speech:latest
+    container_name: piper
+    restart: unless-stopped
+    ports:
+      - "10200:8000"
+    volumes:
+      - ${DATA_DIR}/piper:/app/voices
+    networks:
+      - ai-net
+
+  # ---------------------------------------------------------------------------
+  # Caddy — Reverse Proxy with Auto-TLS
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${DATA_DIR}/caddy/data:/data
+      - ${DATA_DIR}/caddy/config:/config
+    depends_on:
+      - open-webui
+      - comfyui
+    networks:
+      - ai-net
+
+  # ---------------------------------------------------------------------------
+  # Portainer — Docker Management GUI
+  # ---------------------------------------------------------------------------
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${DATA_DIR}/portainer:/data
+    networks:
+      - ai-net
+
+  # ---------------------------------------------------------------------------
+  # Watchtower — Automatic Container Updates
+  # ---------------------------------------------------------------------------
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - WATCHTOWER_SCHEDULE=${WATCHTOWER_SCHEDULE}
+      - WATCHTOWER_CLEANUP=${WATCHTOWER_CLEANUP}
+      - WATCHTOWER_INCLUDE_STOPPED=false
+    networks:
+      - ai-net
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  ai-net:
+    driver: bridge
+    name: ai-net

@@ -1,0 +1,521 @@
+================================================================================
+  AI HOME SERVER — COMPLETE SETUP WALKTHROUGH
+  HP DL380 G9 | RTX A5000 24GB | Proxmox VE
+================================================================================
+
+  Hardware:  128 GB RAM, 13 TB NVMe, NVIDIA RTX A5000 (24 GB GDDR6)
+  Stack:     Ollama + Open WebUI + ComfyUI + TripoSR + Whisper + Piper TTS
+  Result:    Local AI chatbot with voice, image generation, and 3D model creation
+
+================================================================================
+  PHASE 1: CREATE THE VM IN PROXMOX
+================================================================================
+
+STEP 1.1 — Download Ubuntu Server ISO on the Proxmox host
+──────────────────────────────────────────────────────────────────────────────
+
+  SSH into your Proxmox host, then:
+
+    cd /var/lib/vz/template/iso/
+    wget https://releases.ubuntu.com/24.04/ubuntu-24.04-live-server-amd64.iso
+
+
+STEP 1.2 — Create the VM via Proxmox Web GUI
+──────────────────────────────────────────────────────────────────────────────
+
+  Open https://<proxmox-ip>:8006 in your browser and click "Create VM".
+
+  [General]
+    VM ID:     200
+    Name:      ai-server
+
+  [OS]
+    ISO:       ubuntu-24.04-live-server-amd64.iso
+    Type:      Linux
+    Version:   6.x - 2.6 Kernel
+
+  [System]
+    BIOS:      OVMF (UEFI)       ← REQUIRED for GPU passthrough
+    Machine:   q35                ← REQUIRED for PCIe passthrough
+    Add EFI Disk:  Yes (same storage as OS disk)
+    Pre-Enroll keys:  UNCHECK    ← avoids Secure Boot blocking NVIDIA driver
+
+  [Disks]
+    Bus:       VirtIO Block
+    Size:      500 GB
+    Storage:   your NVMe pool
+    Discard:   CHECKED
+    IO Thread: CHECKED
+
+  [CPU]
+    Cores:     16
+    Type:      host               ← REQUIRED — passes full CPU instruction set
+
+  [Memory]
+    Memory:    96000 MB (96 GB)
+    Ballooning: UNCHECK           ← AI workloads need consistent memory
+
+  [Network]
+    Model:     VirtIO (paravirtualized)
+    Bridge:    vmbr0
+
+
+STEP 1.3 — Add GPU Passthrough to the VM
+──────────────────────────────────────────────────────────────────────────────
+
+  NOTE: You mentioned IOMMU is already configured. If not, you would need to
+  enable it in BIOS and add intel_iommu=on to Proxmox kernel params first.
+
+  a) Find your GPU PCI address on the Proxmox host:
+
+    lspci -nn | grep -i nvidia
+
+    Example output:
+      3b:00.0 VGA compatible controller [0300]: NVIDIA Corporation GA102GL [RTX A5000] [10de:2231]
+      3b:00.1 Audio device [0403]: NVIDIA Corporation GA102 [10de:1aef]
+
+    Note the address (3b:00) and the device IDs (10de:2231, 10de:1aef).
+
+  b) Ensure NVIDIA drivers are blacklisted on the Proxmox HOST:
+
+    cat > /etc/modprobe.d/blacklist-nvidia.conf << 'EOF'
+    blacklist nouveau
+    blacklist nvidia
+    blacklist nvidiafb
+    blacklist nvidia_drm
+    blacklist nvidia_modeset
+    EOF
+
+    cat > /etc/modprobe.d/vfio.conf << 'EOF'
+    options vfio-pci ids=10de:2231,10de:1aef
+    EOF
+
+    ⚠️  Replace 10de:2231,10de:1aef with YOUR device IDs from step (a).
+
+    update-initramfs -u -k all
+    reboot
+
+  c) After reboot, edit the VM config:
+
+    nano /etc/pve/qemu-server/200.conf
+
+    Add this line (replace 3b:00 with YOUR PCI address):
+
+      hostpci0: 3b:00,pcie=1,x-vga=0
+
+
+STEP 1.4 — Install Ubuntu Server
+──────────────────────────────────────────────────────────────────────────────
+
+  a) Start VM 200 from Proxmox GUI
+  b) Open the noVNC console
+  c) Walk through the Ubuntu installer:
+     - Language: English
+     - Keyboard: your layout
+     - Network: accept DHCP (or set static IP if preferred)
+     - Proxy: leave blank (unless you use one)
+     - Mirror: default
+     - Storage: "Use entire disk" (the 500 GB VirtIO drive)
+     - Username: admin (or your preference)
+     - Server name: ai-server
+     - SSH: ✅ Install OpenSSH server
+     - Featured snaps: skip (don't select any)
+  d) Reboot when prompted
+  e) Remove the ISO from VM hardware in Proxmox GUI
+
+  f) Note the VM's IP address:
+
+    ip addr show
+
+    Look for the inet address on ens18 or similar (e.g., 192.168.1.100).
+
+  g) Confirm you can SSH in from your PC:
+
+    ssh admin@192.168.1.100
+
+
+================================================================================
+  PHASE 2: TRANSFER PROJECT FILES
+================================================================================
+
+STEP 2.1 — Copy the AI stack files from your Windows PC to the VM
+──────────────────────────────────────────────────────────────────────────────
+
+  Open PowerShell on your Windows machine:
+
+    scp -r C:\AIINIT admin@192.168.1.100:~/ai-stack
+
+  ⚠️  Replace 192.168.1.100 with your VM's actual IP.
+
+
+STEP 2.2 — SSH into the VM
+──────────────────────────────────────────────────────────────────────────────
+
+    ssh admin@192.168.1.100
+
+
+STEP 2.3 — Make scripts executable
+──────────────────────────────────────────────────────────────────────────────
+
+    cd ~/ai-stack
+    chmod +x scripts/*.sh tests/*.sh
+
+
+================================================================================
+  PHASE 3: BOOTSTRAP THE VM (NVIDIA + Docker)
+================================================================================
+
+  The bootstrap script installs:
+    - System packages (curl, git, htop, nvtop, etc.)
+    - NVIDIA GPU driver (550+ series)
+    - Docker Engine + Docker Compose
+    - NVIDIA Container Toolkit (lets containers access the GPU)
+    - Creates the data directory structure
+
+STEP 3.1 — Run the bootstrap
+──────────────────────────────────────────────────────────────────────────────
+
+    sudo ./scripts/bootstrap.sh
+
+  ⚠️  The script will REBOOT AUTOMATICALLY twice:
+    1st reboot: after blacklisting Nouveau driver (if it was loaded)
+    2nd reboot: after installing the NVIDIA driver
+
+  After each reboot, SSH back in and re-run the same command:
+
+    ssh admin@192.168.1.100
+    cd ~/ai-stack
+    sudo ./scripts/bootstrap.sh
+
+  The script is idempotent — it detects what's already installed and skips it.
+
+
+STEP 3.2 — Verify the bootstrap completed
+──────────────────────────────────────────────────────────────────────────────
+
+  You should see output like:
+
+    =============================================
+      Bootstrap Complete!
+    =============================================
+      GPU: NVIDIA RTX A5000 (24564 MiB)
+      Docker: 27.x.x
+      Data dir: /home/admin/ai-data
+
+  Quick verification commands:
+
+    nvidia-smi                    # Should show RTX A5000, 24 GB, driver 550+
+    docker --version              # Should show Docker 27.x+
+    docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+                                  # Should show GPU inside a container
+
+
+STEP 3.3 — Log out and back in (required for docker group)
+──────────────────────────────────────────────────────────────────────────────
+
+    exit
+    ssh admin@192.168.1.100
+
+  Then verify you can run docker without sudo:
+
+    docker ps                     # Should work without sudo
+
+
+================================================================================
+  PHASE 4: CONFIGURE AND DEPLOY THE STACK
+================================================================================
+
+STEP 4.1 — Set a secure secret key
+──────────────────────────────────────────────────────────────────────────────
+
+    cd ~/ai-stack/docker
+    sed -i "s/CHANGE_ME_TO_A_RANDOM_STRING/$(openssl rand -hex 32)/" .env
+
+  Verify it changed:
+
+    grep WEBUI_SECRET_KEY .env
+    # Should show a 64-character hex string, NOT "CHANGE_ME_TO_A_RANDOM_STRING"
+
+
+STEP 4.2 — (Optional) Set a static hostname/IP
+──────────────────────────────────────────────────────────────────────────────
+
+  If you want to access via a hostname instead of IP, edit .env:
+
+    nano .env
+
+  Change:
+    DOMAIN=localhost
+  To:
+    DOMAIN=ai-server.local
+
+  Or keep localhost if you'll access by IP.
+
+
+STEP 4.3 — Launch the stack
+──────────────────────────────────────────────────────────────────────────────
+
+    docker compose up -d
+
+  This pulls all container images and starts 9 services. First run will
+  download several GB of images. On fast internet, expect 5-15 minutes.
+
+  Monitor progress:
+
+    docker compose logs -f
+
+  Press Ctrl+C to stop following logs.
+
+  Wait until Ollama reports healthy:
+
+    docker ps
+
+  All 9 containers should show "Up" status.
+
+
+STEP 4.4 — Pull your first LLM model
+──────────────────────────────────────────────────────────────────────────────
+
+    docker exec ollama ollama pull llama3.1:8b
+
+  This downloads the Llama 3.1 8B model (~4.7 GB download).
+  It will consume ~10 GB VRAM when loaded with an 8K context window
+  (4.7 GB weights + ~2 GB KV cache + ~0.5 GB CUDA overhead).
+
+  Also pull an embedding model for RAG (document search):
+
+    docker exec ollama ollama pull nomic-embed-text
+
+
+STEP 4.5 — (Optional) Pull additional models
+──────────────────────────────────────────────────────────────────────────────
+
+  More LLMs:
+    docker exec ollama ollama pull mistral:7b      # ~8 GB VRAM total
+    docker exec ollama ollama pull phi3:14b         # ~14 GB VRAM total
+
+  Image generation models (for ComfyUI):
+    ~/ai-stack/scripts/pull-models.sh
+
+  Or manually download SDXL:
+    wget -O ~/ai-data/comfyui/models/checkpoints/sd_xl_base_1.0.safetensors \
+      "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors"
+
+
+================================================================================
+  PHASE 5: VERIFY EVERYTHING WORKS
+================================================================================
+
+STEP 5.1 — Run the smoke test
+──────────────────────────────────────────────────────────────────────────────
+
+    ~/ai-stack/tests/smoke-test.sh --wait
+
+  This checks:
+    ✓ All 9 containers are running
+    ✓ GPU is accessible from inside containers
+    ✓ All service HTTP endpoints respond
+    ✓ Inter-service connectivity (Open WebUI → Ollama, etc.)
+    ✓ Docker network exists with all containers
+    ✓ LLM inference actually works (sends a test prompt)
+
+
+STEP 5.2 — Access from your browser
+──────────────────────────────────────────────────────────────────────────────
+
+  Open these URLs from any device on your network:
+
+    https://192.168.1.100/           ← Chat UI (Open WebUI)
+    https://192.168.1.100/comfy      ← Image Generation (ComfyUI)
+    https://192.168.1.100/3d         ← 3D Generation (TripoSR)
+    https://192.168.1.100:9443       ← Docker Management (Portainer)
+
+  ⚠️  Your browser will warn about a self-signed certificate. This is expected.
+      Click "Advanced" → "Proceed" (Chrome) or "Accept the Risk" (Firefox).
+
+  On first visit to Open WebUI:
+    1. Create your admin account (first signup becomes admin)
+    2. Select "llama3.1:8b" as the model
+    3. Start chatting!
+
+
+STEP 5.3 — Test voice
+──────────────────────────────────────────────────────────────────────────────
+
+  In Open WebUI:
+    1. Click the microphone icon in the chat input
+    2. Allow microphone access (requires HTTPS — which Caddy provides)
+    3. Speak your message
+    4. Whisper transcribes it → LLM responds → Piper reads it back
+
+  ⚠️  Voice requires HTTPS. If you access via HTTP, the mic won't work.
+
+
+STEP 5.4 — Test image generation
+──────────────────────────────────────────────────────────────────────────────
+
+  Option A: Via ComfyUI directly
+    1. Go to https://192.168.1.100/comfy
+    2. Use the default workflow or load a custom one
+    3. Click "Queue Prompt"
+
+  Option B: Via Open WebUI (if configured)
+    1. In chat, type: "generate an image of a mountain landscape"
+    2. Open WebUI sends the request to ComfyUI
+
+  ⚠️  ComfyUI needs a checkpoint model in ~/ai-data/comfyui/models/checkpoints/
+      Run pull-models.sh or download SDXL manually (see Step 4.5).
+
+
+STEP 5.5 — Test 3D generation
+──────────────────────────────────────────────────────────────────────────────
+
+    1. Go to https://192.168.1.100/3d
+    2. Upload a clear photo of a single object
+    3. TripoSR generates a 3D mesh in seconds
+    4. Download the OBJ/GLB file
+
+
+================================================================================
+  PHASE 6: MAINTENANCE & BACKUPS
+================================================================================
+
+STEP 6.1 — Automatic updates (already configured)
+──────────────────────────────────────────────────────────────────────────────
+
+  Watchtower checks for new container images daily at 4 AM and updates
+  automatically. No action needed.
+
+
+STEP 6.2 — Manual backup
+──────────────────────────────────────────────────────────────────────────────
+
+    ~/ai-stack/scripts/backup.sh
+
+  This backs up chat history, configs, and user data (NOT model files —
+  they can be re-downloaded). Keeps last 7 backups in ~/ai-backups/.
+
+
+STEP 6.3 — Monitor GPU usage
+──────────────────────────────────────────────────────────────────────────────
+
+    nvtop                   # Real-time GPU monitor (like htop for GPU)
+    nvidia-smi              # Snapshot of GPU state
+    docker stats            # Container CPU/RAM usage
+
+
+STEP 6.4 — Restart the stack
+──────────────────────────────────────────────────────────────────────────────
+
+    cd ~/ai-stack/docker
+    docker compose restart            # Restart all services
+    docker compose restart ollama     # Restart a single service
+    docker compose down && docker compose up -d   # Full stop + start
+
+
+STEP 6.5 — View logs
+──────────────────────────────────────────────────────────────────────────────
+
+    docker compose logs ollama --tail 50       # Last 50 lines of Ollama
+    docker compose logs -f                     # Follow all logs live
+    docker compose logs open-webui --tail 100  # Open WebUI logs
+
+
+STEP 6.6 — Add a cron job for automatic backups
+──────────────────────────────────────────────────────────────────────────────
+
+    crontab -e
+
+  Add this line to back up daily at 3 AM:
+
+    0 3 * * * /home/admin/ai-stack/scripts/backup.sh
+
+
+================================================================================
+  VRAM BUDGET REFERENCE (24 GB RTX A5000)
+================================================================================
+
+  All figures include model weights + KV cache + context buffers + working
+  memory. These are REAL usage numbers, not just weight size.
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  SERVICE            │ IDLE (resident) │ ACTIVE (inference)              │
+  ├─────────────────────┼─────────────────┼─────────────────────────────────┤
+  │  Ollama 8B Q4_K_M   │  ~7 GB          │  ~10 GB (8K ctx)               │
+  │                     │                 │  ~13 GB (32K ctx)              │
+  │  Ollama 14B Q4_K_M  │  ~10 GB         │  ~14 GB (8K ctx)               │
+  │  ComfyUI + SDXL     │  —              │  ~8 GB                         │
+  │  ComfyUI + Flux     │  —              │  ~16 GB                        │
+  │  TripoSR            │  —              │  ~5 GB                         │
+  │  Faster-Whisper     │  ~1 GB          │  ~2 GB                         │
+  │  Piper TTS          │  CPU only       │  CPU only                      │
+  └─────────────────────┴─────────────────┴─────────────────────────────────┘
+
+  WHAT FITS SIMULTANEOUSLY:                            TOTAL VRAM
+  ─────────────────────────────────────────────────────────────────
+  ✅  Ollama 8B + Whisper                               ~12 GB
+  ✅  Ollama 8B + SDXL + Whisper                        ~20 GB
+  ✅  TripoSR + Whisper + Ollama 8B                     ~17 GB
+  ⚠️  Ollama 14B + SDXL                                 ~22 GB (tight)
+  ❌  Ollama 8B + Flux                                  ~26 GB (won't fit)
+  ❌  Ollama 14B + Flux                                 ~30 GB (won't fit)
+
+  For Flux: Let Ollama auto-unload (5 min idle), then generate.
+
+
+================================================================================
+  QUICK REFERENCE — COMMON COMMANDS
+================================================================================
+
+  # Start/stop stack
+  cd ~/ai-stack/docker
+  docker compose up -d              # Start all
+  docker compose down               # Stop all
+  docker compose restart             # Restart all
+
+  # Manage LLM models
+  docker exec ollama ollama list    # List installed models
+  docker exec ollama ollama pull llama3.1:8b   # Download a model
+  docker exec ollama ollama rm mistral:7b      # Remove a model
+
+  # GPU monitoring
+  nvidia-smi                        # VRAM snapshot
+  nvtop                             # Live GPU monitor
+
+  # Container management
+  docker ps                         # List running containers
+  docker stats                      # Live resource usage
+  docker compose logs -f ollama     # Follow Ollama logs
+
+  # Backup
+  ~/ai-stack/scripts/backup.sh      # Manual backup
+
+  # System
+  df -h                             # Disk space
+  free -h                           # RAM usage
+  htop                              # CPU/process monitor
+
+
+================================================================================
+  TROUBLESHOOTING CHEAT SHEET
+================================================================================
+
+  PROBLEM                          FIX
+  ─────────────────────────────────────────────────────────────────────────
+  GPU not visible in VM            Check IOMMU, hostpci0 config, q35/OVMF
+  nvidia-smi: not found            Re-run bootstrap.sh (driver not installed)
+  nvidia-smi: no devices           Add args: -cpu host,kvm=off to VM config
+  docker: permission denied        Log out and back in (docker group)
+  Open WebUI: connection refused   Wait for Ollama healthcheck, check logs
+  Voice mic not working            Must use HTTPS (not HTTP)
+  ComfyUI: no checkpoint found     Download SDXL to ~/ai-data/comfyui/models/checkpoints/
+  CUDA out of memory               Unload LLM: docker compose restart ollama
+  Container keeps restarting       Check logs: docker compose logs <name> --tail 50
+  Self-signed cert warning         Expected. Click Advanced → Proceed.
+
+  Full troubleshooting guide: ~/ai-stack/docs/04-TROUBLESHOOTING.md
+
+
+================================================================================
+  END OF WALKTHROUGH
+================================================================================

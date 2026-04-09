@@ -1,0 +1,60 @@
+# =============================================================================
+# Caddyfile — Reverse Proxy Configuration
+# =============================================================================
+#
+# For LAN-only access, Caddy will use self-signed internal TLS certificates.
+# For public access with a domain, replace {$DOMAIN} with your actual domain
+# and remove "tls internal".
+# =============================================================================
+
+{
+	# Use internal CA for self-signed certs (LAN only)
+	# Remove this block if using a real domain with Let's Encrypt
+	local_certs
+}
+
+# Main entry — Chat UI
+https://{$DOMAIN:localhost} {
+	tls internal
+
+	# Default route → Open WebUI
+	reverse_proxy open-webui:8080
+
+	# ComfyUI
+	handle_path /comfy/* {
+		reverse_proxy comfyui:8188
+	}
+
+	# ComfyUI WebSocket (required for live updates)
+	@comfyws {
+		path /comfy/ws*
+		header Connection *Upgrade*
+		header Upgrade websocket
+	}
+	handle @comfyws {
+		reverse_proxy comfyui:8188
+	}
+
+	# TripoSR — 3D Generation
+	handle_path /3d/* {
+		reverse_proxy triposr:8090
+	}
+
+	# Health check endpoint
+	handle /health {
+		respond "OK" 200
+	}
+
+	# Security headers
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Request size limit (100MB for image uploads)
+	request_body {
+		max_size 100MB
+	}
+}

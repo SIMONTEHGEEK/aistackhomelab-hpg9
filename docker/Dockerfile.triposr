@@ -1,0 +1,35 @@
+# =============================================================================
+# TripoSR — Image to 3D Model Generation
+# Custom Dockerfile since there's no official pre-built image
+# =============================================================================
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv \
+    git wget \
+    libgl1-mesa-glx libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Clone TripoSR
+RUN git clone https://github.com/VAST-AI-Research/TripoSR.git /app
+
+# Install Python dependencies
+RUN pip3 install --no-cache-dir \
+    torch torchvision --index-url https://download.pytorch.org/whl/cu124
+RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir gradio
+
+# Create output/input directories
+RUN mkdir -p /app/output /app/input
+
+# Expose Gradio port
+EXPOSE 8090
+
+# Launch with Gradio web UI
+CMD ["python3", "gradio_app.py", "--server-name", "0.0.0.0", "--server-port", "8090"]
