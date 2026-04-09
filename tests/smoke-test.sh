@@ -55,7 +55,7 @@ fi
 # ---------------------------------------------------------------------------
 echo "--- Container Status ---"
 
-EXPECTED_CONTAINERS=("ollama" "open-webui" "comfyui" "triposr" "whisper" "piper" "traefik" "portainer" "watchtower")
+EXPECTED_CONTAINERS=("ollama" "open-webui" "comfyui" "whisper" "piper" "traefik" "portainer" "watchtower")
 
 for ctr in "${EXPECTED_CONTAINERS[@]}"; do
     STATUS=$(docker inspect -f '{{.State.Status}}' "$ctr" 2>/dev/null)
@@ -119,14 +119,6 @@ if [ "$HTTP_CODE" = "200" ]; then
     pass "ComfyUI responding on :8188"
 else
     fail "ComfyUI not responding on :8188 (HTTP $HTTP_CODE)"
-fi
-
-# TripoSR
-HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:8090 2>/dev/null)
-if [ "$HTTP_CODE" = "200" ]; then
-    pass "TripoSR responding on :8090"
-else
-    fail "TripoSR not responding on :8090 (HTTP $HTTP_CODE)"
 fi
 
 # Whisper

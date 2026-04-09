@@ -35,19 +35,6 @@ services:
     entrypoint: ["caddy", "respond", "--listen", ":8188", "ComfyUI test stub OK", "200"]
     volumes: []
 
-  triposr:
-    # Replace with a simple HTTP stub for integration testing
-    image: caddy:2-alpine
-    build: !reset null
-    deploy:
-      resources:
-        reservations:
-          devices: []
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=
-    entrypoint: ["caddy", "respond", "--listen", ":8090", "TripoSR test stub OK", "200"]
-    volumes: []
-
   whisper:
     # Replace with a simple HTTP stub for integration testing
     image: caddy:2-alpine

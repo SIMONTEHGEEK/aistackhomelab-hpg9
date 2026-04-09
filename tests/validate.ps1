@@ -62,7 +62,6 @@ $requiredFiles = @(
     "docker/.env"
     "docker/traefik.yml"
     "docker/dynamic/middleware.yml"
-    "docker/Dockerfile.triposr"
     "scripts/bootstrap.sh"
     "scripts/pull-models.sh"
     "scripts/backup.sh"
@@ -91,7 +90,7 @@ Write-Host "--- Docker Compose Validation ---" -ForegroundColor White
 $composeFile = Join-Path $BASE "docker/docker-compose.yml"
 $composeContent = Get-Content $composeFile -Raw
 
-$expectedServices = @("ollama","open-webui","comfyui","triposr","whisper","piper","traefik","portainer","watchtower")
+$expectedServices = @("ollama","open-webui","comfyui","whisper","piper","traefik","portainer","watchtower")
 
 foreach ($svc in $expectedServices) {
     $pat = "(?m)^\s{2}" + $svc + ":"
@@ -132,7 +131,7 @@ else {
 }
 
 # GPU reservations
-$gpuServices = @("ollama","comfyui","triposr","whisper")
+$gpuServices = @("ollama","comfyui","whisper")
 foreach ($svc in $gpuServices) {
     $pat = "(?s)\s{2}" + $svc + ":.*?(?=\n\s{2}\w|\nnetworks:)"
     if ($composeContent -match $pat) {
@@ -296,7 +295,6 @@ else {
 $labeledServices = @(
     @{ Svc = "open-webui"; Route = "/" }
     @{ Svc = "comfyui"; Route = "/comfy" }
-    @{ Svc = "triposr"; Route = "/3d" }
 )
 foreach ($ls in $labeledServices) {
     if ($composeContent -match ("traefik.http.routers." + $ls.Svc.Replace("-","") -replace "open-?webui","webui")) {
@@ -332,44 +330,7 @@ else {
 }
 
 # =============================================================================
-# TEST 5: Dockerfile Validation
-# =============================================================================
-Write-Host ""
-Write-Host "--- Dockerfile Validation ---" -ForegroundColor White
-
-$dfPath = Join-Path $BASE "docker/Dockerfile.triposr"
-$dfContent = Get-Content $dfPath -Raw
-
-if ($dfContent -match "FROM nvidia/cuda") { Test-Check "PASS" "CUDA base image" }
-else { Test-Check "FAIL" "Missing CUDA base image" }
-
-if ($dfContent -match "WORKDIR") { Test-Check "PASS" "WORKDIR set" }
-else { Test-Check "WARN" "No WORKDIR" }
-
-if ($dfContent -match "EXPOSE 8090") { Test-Check "PASS" "EXPOSE 8090 matches compose" }
-else { Test-Check "FAIL" "EXPOSE mismatch" "Expected 8090" }
-
-if ($dfContent -match "CMD") { Test-Check "PASS" "CMD instruction present" }
-else { Test-Check "FAIL" "No CMD" "Container has no entrypoint" }
-
-$pipCount = ([regex]::Matches($dfContent, "pip3?\s+install")).Count
-$noCacheCount = ([regex]::Matches($dfContent, "--no-cache-dir")).Count
-if ($pipCount -gt 0 -and $noCacheCount -ge $pipCount) {
-    Test-Check "PASS" "All pip installs use --no-cache-dir"
-}
-elseif ($pipCount -gt 0) {
-    Test-Check "WARN" "Some pip installs lack --no-cache-dir" "Larger image"
-}
-
-if ($dfContent -match "USER \w") {
-    Test-Check "PASS" "Non-root USER set"
-}
-else {
-    Test-Check "WARN" "Running as root" "Acceptable for GPU workloads"
-}
-
-# =============================================================================
-# TEST 6: Shell Script Validation
+# TEST 5: Shell Script Validation
 # =============================================================================
 Write-Host ""
 Write-Host "--- Shell Script Validation ---" -ForegroundColor White
@@ -512,7 +473,7 @@ Write-Host "--- Test Override Validation ---" -ForegroundColor White
 $testPath = Join-Path $BASE "docker/docker-compose.test.yml"
 $testContent = Get-Content $testPath -Raw
 
-foreach ($svc in @("ollama","comfyui","triposr","whisper")) {
+foreach ($svc in @("ollama","comfyui","whisper")) {
     $pat = "(?m)^\s{2}" + $svc + ":"
     if ($testContent -match $pat) {
         Test-Check "PASS" "Test override covers: $svc"

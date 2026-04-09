@@ -127,39 +127,6 @@ services:
       - ai-net
 
   # ---------------------------------------------------------------------------
-  # TripoSR — Image to 3D Model Generation
-  # ---------------------------------------------------------------------------
-  triposr:
-    build:
-      context: .
-      dockerfile: Dockerfile.triposr
-    container_name: triposr
-    restart: unless-stopped
-    volumes:
-      - ${DATA_DIR}/triposr/output:/app/output
-      - ${DATA_DIR}/triposr/input:/app/input
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.triposr.rule=PathPrefix(`/3d`)"
-      - "traefik.http.routers.triposr.priority=10"
-      - "traefik.http.routers.triposr.entrypoints=websecure"
-      - "traefik.http.routers.triposr.tls=true"
-      - "traefik.http.middlewares.triposr-strip.stripprefix.prefixes=/3d"
-      - "traefik.http.routers.triposr.middlewares=triposr-strip"
-      - "traefik.http.services.triposr.loadbalancer.server.port=8090"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    networks:
-      - ai-net
-
-  # ---------------------------------------------------------------------------
   # Faster-Whisper — Speech-to-Text
   # ---------------------------------------------------------------------------
   whisper:

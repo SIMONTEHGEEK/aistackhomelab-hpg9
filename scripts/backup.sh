@@ -30,7 +30,6 @@ tar -czf "${BACKUP_FILE}" \
     --exclude='*.pth' \
     --exclude='*.onnx' \
     --exclude='comfyui/output/*' \
-    --exclude='triposr/output/*' \
     -C "${HOME}" \
     ai-data/open-webui \
     ai-data/traefik \

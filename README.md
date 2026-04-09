@@ -18,7 +18,6 @@
 | **Ollama** | LLM inference engine | 11434 | 7–20 GB (model + context dependent) |
 | **Open WebUI** | Chat UI + Voice + RAG | 3000 | — |
 | **ComfyUI** | Image generation (SDXL/Flux) | 8188 | 8–18 GB |
-| **TripoSR** | Image → 3D mesh generation | 8090 | 4–6 GB |
 | **Faster-Whisper** | Speech-to-Text | 10300 | ~2 GB |
 | **Piper TTS** | Text-to-Speech | 10200 | CPU only |
 | **Traefik** | Reverse proxy + auto TLS | 80/443 | — |
@@ -37,12 +36,10 @@ context window buffers, and working memory (not just weights alone):
 - **ComfyUI** (on-demand): SDXL ~8 GB / Flux ~16 GB
   - SDXL: ~3.5 GB weights + ~2 GB VAE/CLIP + ~2.5 GB sampling workspace
   - Flux Dev: ~12 GB weights + ~4 GB working memory
-- **TripoSR** (on-demand): ~5 GB
-  - ~1 GB model weights + ~3–4 GB mesh generation working memory
 - **Faster-Whisper** (lightweight): ~2 GB
   - large-v3: ~1.5 GB weights + ~0.5 GB CTranslate2 buffers
 
-**Strategy**: Ollama stays resident. ComfyUI and TripoSR claim VRAM on-demand.
+**Strategy**: Ollama stays resident. ComfyUI claims VRAM on-demand.
 Use `OLLAMA_MAX_LOADED_MODELS=1` and `OLLAMA_KEEP_ALIVE=5m` to auto-unload idle models.
 
 **Important**: You CANNOT run Ollama (8B) + Flux simultaneously — they exceed 24 GB
@@ -69,7 +66,6 @@ docker exec ollama ollama pull llama3.1:8b
 # 6. Access services
 # Chat:      https://<your-ip>/
 # ComfyUI:   https://<your-ip>/comfy
-# 3D Gen:    https://<your-ip>/3d
 # Portainer: https://<your-ip>:9443
 ```
 
