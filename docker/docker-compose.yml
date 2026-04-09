@@ -49,9 +49,10 @@ services:
               capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 120s
     networks:
       - ai-net
 
