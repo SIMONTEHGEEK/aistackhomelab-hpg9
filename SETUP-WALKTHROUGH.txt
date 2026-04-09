@@ -326,7 +326,7 @@ STEP 5.2 — Access from your browser
   Open these URLs from any device on your network:
 
     https://192.168.1.100/           ← Chat UI (Open WebUI)
-    https://192.168.1.100/comfy      ← Image Generation (ComfyUI)
+    http://192.168.1.100:8188        ← Image Generation (ComfyUI)
     https://192.168.1.100:9443       ← Docker Management (Portainer)
 
   ⚠️  Your browser will warn about a self-signed certificate. This is expected.
@@ -354,7 +354,7 @@ STEP 5.4 — Test image generation
 ──────────────────────────────────────────────────────────────────────────────
 
   Option A: Via ComfyUI directly
-    1. Go to https://192.168.1.100/comfy
+    1. Go to http://192.168.1.100:8188
     2. Use the default workflow or load a custom one
     3. Click "Queue Prompt"
 

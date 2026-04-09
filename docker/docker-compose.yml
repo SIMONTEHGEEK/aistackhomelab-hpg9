@@ -96,26 +96,28 @@ services:
   # ComfyUI — Image Generation (Stable Diffusion)
   # ---------------------------------------------------------------------------
   comfyui:
-    image: ghcr.io/ai-dock/comfyui:latest-cuda
+    image: pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime
     container_name: comfyui
     restart: unless-stopped
+    ports:
+      - "8188:8188"
     volumes:
-      - ${DATA_DIR}/comfyui/models:/opt/ComfyUI/models
-      - ${DATA_DIR}/comfyui/output:/opt/ComfyUI/output
-      - ${DATA_DIR}/comfyui/input:/opt/ComfyUI/input
-      - ${DATA_DIR}/comfyui/custom_nodes:/opt/ComfyUI/custom_nodes
+      - ${DATA_DIR}/comfyui:/workspace/ComfyUI
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
-      - CLI_ARGS=--listen 0.0.0.0 --port 8188
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.comfyui.rule=PathPrefix(`/comfy`)"
-      - "traefik.http.routers.comfyui.priority=10"
-      - "traefik.http.routers.comfyui.entrypoints=websecure"
-      - "traefik.http.routers.comfyui.tls=true"
-      - "traefik.http.middlewares.comfy-strip.stripprefix.prefixes=/comfy"
-      - "traefik.http.routers.comfyui.middlewares=comfy-strip"
-      - "traefik.http.services.comfyui.loadbalancer.server.port=8188"
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        apt-get update -qq && apt-get install -y -qq git > /dev/null 2>&1
+        if [ ! -f /workspace/ComfyUI/main.py ]; then
+          echo "First run: cloning ComfyUI..."
+          git clone https://github.com/comfyanonymous/ComfyUI.git /workspace/ComfyUI
+          cd /workspace/ComfyUI
+          pip install -q -r requirements.txt
+        fi
+        cd /workspace/ComfyUI
+        python main.py --listen 0.0.0.0 --port 8188
     deploy:
       resources:
         reservations:
