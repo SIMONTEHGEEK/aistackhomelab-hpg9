@@ -4,8 +4,8 @@
 ================================================================================
 
   Hardware:  128 GB RAM, 13 TB NVMe, NVIDIA RTX A5000 (24 GB GDDR6)
-  Stack:     Ollama + Open WebUI + ComfyUI + TripoSR + Whisper + Piper TTS
-  Result:    Local AI chatbot with voice, image generation, and 3D model creation
+  Stack:     Ollama + Open WebUI + ComfyUI + Whisper + Piper TTS
+  Result:    Local AI chatbot with voice and image generation
 
 ================================================================================
   PHASE 1: CREATE THE VM IN PROXMOX
@@ -257,7 +257,7 @@ STEP 4.3 — Launch the stack
 
     docker compose up -d
 
-  This pulls all container images and starts 9 services. First run will
+  This pulls all container images and starts 8 services. First run will
   download several GB of images. On fast internet, expect 5-15 minutes.
 
   Monitor progress:
@@ -270,17 +270,17 @@ STEP 4.3 — Launch the stack
 
     docker ps
 
-  All 9 containers should show "Up" status.
+  All 8 containers should show "Up" status.
 
 
 STEP 4.4 — Pull your first LLM model
 ──────────────────────────────────────────────────────────────────────────────
 
-    docker exec ollama ollama pull llama3.1:8b
+    docker exec ollama ollama pull qwen3.5:9b
 
-  This downloads the Llama 3.1 8B model (~4.7 GB download).
-  It will consume ~10 GB VRAM when loaded with an 8K context window
-  (4.7 GB weights + ~2 GB KV cache + ~0.5 GB CUDA overhead).
+  This downloads the Qwen 3.5 9B model (~6 GB download).
+  It will consume ~11 GB VRAM when loaded with context
+  (weights + KV cache + CUDA overhead). Supports vision, thinking, and tools.
 
   Also pull an embedding model for RAG (document search):
 
@@ -312,7 +312,7 @@ STEP 5.1 — Run the smoke test
     ~/ai-stack/tests/smoke-test.sh --wait
 
   This checks:
-    ✓ All 9 containers are running
+    ✓ All 8 containers are running
     ✓ GPU is accessible from inside containers
     ✓ All service HTTP endpoints respond
     ✓ Inter-service connectivity (Open WebUI → Ollama, etc.)
@@ -327,7 +327,6 @@ STEP 5.2 — Access from your browser
 
     https://192.168.1.100/           ← Chat UI (Open WebUI)
     https://192.168.1.100/comfy      ← Image Generation (ComfyUI)
-    https://192.168.1.100/3d         ← 3D Generation (TripoSR)
     https://192.168.1.100:9443       ← Docker Management (Portainer)
 
   ⚠️  Your browser will warn about a self-signed certificate. This is expected.
@@ -335,7 +334,7 @@ STEP 5.2 — Access from your browser
 
   On first visit to Open WebUI:
     1. Create your admin account (first signup becomes admin)
-    2. Select "llama3.1:8b" as the model
+    2. Select "qwen3.5:9b" as the model
     3. Start chatting!
 
 
@@ -365,15 +364,6 @@ STEP 5.4 — Test image generation
 
   ⚠️  ComfyUI needs a checkpoint model in ~/ai-data/comfyui/models/checkpoints/
       Run pull-models.sh or download SDXL manually (see Step 4.5).
-
-
-STEP 5.5 — Test 3D generation
-──────────────────────────────────────────────────────────────────────────────
-
-    1. Go to https://192.168.1.100/3d
-    2. Upload a clear photo of a single object
-    3. TripoSR generates a 3D mesh in seconds
-    4. Download the OBJ/GLB file
 
 
 ================================================================================
@@ -446,7 +436,6 @@ STEP 6.6 — Add a cron job for automatic backups
   │  Ollama 14B Q4_K_M  │  ~10 GB         │  ~14 GB (8K ctx)               │
   │  ComfyUI + SDXL     │  —              │  ~8 GB                         │
   │  ComfyUI + Flux     │  —              │  ~16 GB                        │
-  │  TripoSR            │  —              │  ~5 GB                         │
   │  Faster-Whisper     │  ~1 GB          │  ~2 GB                         │
   │  Piper TTS          │  CPU only       │  CPU only                      │
   └─────────────────────┴─────────────────┴─────────────────────────────────┘
@@ -455,7 +444,6 @@ STEP 6.6 — Add a cron job for automatic backups
   ─────────────────────────────────────────────────────────────────
   ✅  Ollama 8B + Whisper                               ~12 GB
   ✅  Ollama 8B + SDXL + Whisper                        ~20 GB
-  ✅  TripoSR + Whisper + Ollama 8B                     ~17 GB
   ⚠️  Ollama 14B + SDXL                                 ~22 GB (tight)
   ❌  Ollama 8B + Flux                                  ~26 GB (won't fit)
   ❌  Ollama 14B + Flux                                 ~30 GB (won't fit)
@@ -475,7 +463,7 @@ STEP 6.6 — Add a cron job for automatic backups
 
   # Manage LLM models
   docker exec ollama ollama list    # List installed models
-  docker exec ollama ollama pull llama3.1:8b   # Download a model
+  docker exec ollama ollama pull qwen3.5:9b   # Download a model
   docker exec ollama ollama rm mistral:7b      # Remove a model
 
   # GPU monitoring

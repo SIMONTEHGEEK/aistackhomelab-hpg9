@@ -61,7 +61,7 @@ sudo ./scripts/bootstrap.sh
 cd docker && docker compose up -d
 
 # 5. Pull your first LLM model
-docker exec ollama ollama pull llama3.1:8b
+docker exec ollama ollama pull qwen3.5:9b
 
 # 6. Access services
 # Chat:      https://<your-ip>/

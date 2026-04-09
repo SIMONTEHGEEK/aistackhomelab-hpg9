@@ -25,7 +25,7 @@ nvidia-smi
 sudo fuser -v /dev/nvidia*
 
 # Use a smaller model
-docker exec ollama ollama pull llama3.1:8b
+docker exec ollama ollama pull qwen3.5:9b
 ```
 
 ### Ollama API not responding

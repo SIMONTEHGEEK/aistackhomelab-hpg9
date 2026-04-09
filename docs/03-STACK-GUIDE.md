@@ -13,8 +13,8 @@ A Traefik reverse proxy provides HTTPS and path-based routing with native WebSoc
 - **Why**: Simple API, automatic VRAM management, supports hot-swapping models
 - **VRAM**: 7–20 GB total (weights + KV cache + CUDA overhead)
 - **Recommended models** (VRAM = weights + KV cache at 8K context):
-  - `llama3.1:8b` — Best general-purpose (~10 GB total: 4.7 GB weights + 2 GB KV + overhead)
-  - `llama3.1:70b-q4` — Won't fit in 24 GB with context — use `llama3.1:8b` instead
+  - `qwen3.5:9b` — Best all-rounder with vision+thinking+tools (~11 GB total)
+  - `qwen3:14b` — Stronger reasoning, no vision (~16 GB total)
   - `mistral:7b` — Fast, good at coding (~8 GB total)
   - `phi3:14b` — Microsoft, great reasoning (~14 GB total)
   - `qwen2.5:14b` — Strong multilingual (~14 GB total)

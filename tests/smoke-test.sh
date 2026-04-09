@@ -198,7 +198,7 @@ if [ -n "$MODELS" ]; then
             info "  $line"
         done
     else
-        warn "No models installed yet — run: docker exec ollama ollama pull llama3.1:8b"
+        warn "No models installed yet — run: docker exec ollama ollama pull qwen3.5:9b"
     fi
 else
     fail "Cannot list Ollama models"
