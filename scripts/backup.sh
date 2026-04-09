@@ -33,7 +33,7 @@ tar -czf "${BACKUP_FILE}" \
     --exclude='triposr/output/*' \
     -C "${HOME}" \
     ai-data/open-webui \
-    ai-data/caddy \
+    ai-data/traefik \
     ai-data/portainer \
     ai-data/piper \
     ai-stack/docker \

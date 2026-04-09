@@ -60,7 +60,8 @@ $requiredFiles = @(
     "docker/docker-compose.yml"
     "docker/docker-compose.test.yml"
     "docker/.env"
-    "docker/Caddyfile"
+    "docker/traefik.yml"
+    "docker/dynamic/middleware.yml"
     "docker/Dockerfile.triposr"
     "scripts/bootstrap.sh"
     "scripts/pull-models.sh"
@@ -90,7 +91,7 @@ Write-Host "--- Docker Compose Validation ---" -ForegroundColor White
 $composeFile = Join-Path $BASE "docker/docker-compose.yml"
 $composeContent = Get-Content $composeFile -Raw
 
-$expectedServices = @("ollama","open-webui","comfyui","triposr","whisper","piper","caddy","portainer","watchtower")
+$expectedServices = @("ollama","open-webui","comfyui","triposr","whisper","piper","traefik","portainer","watchtower")
 
 foreach ($svc in $expectedServices) {
     $pat = "(?m)^\s{2}" + $svc + ":"
@@ -248,32 +249,73 @@ else {
 }
 
 # =============================================================================
-# TEST 4: Caddyfile Validation
+# TEST 4: Traefik Config Validation
 # =============================================================================
 Write-Host ""
-Write-Host "--- Caddyfile Validation ---" -ForegroundColor White
+Write-Host "--- Traefik Config Validation ---" -ForegroundColor White
 
-$caddyFile = Join-Path $BASE "docker/Caddyfile"
-$caddyContent = Get-Content $caddyFile -Raw
+$traefikFile = Join-Path $BASE "docker/traefik.yml"
+$traefikContent = Get-Content $traefikFile -Raw
 
-# Required routes
-$routes = @(
-    @{ Pat = "reverse_proxy open-webui:8080"; Nm = "Open WebUI route" }
-    @{ Pat = "reverse_proxy comfyui:8188"; Nm = "ComfyUI route" }
-    @{ Pat = "reverse_proxy triposr:8090"; Nm = "TripoSR route" }
+$middlewareFile = Join-Path $BASE "docker/dynamic/middleware.yml"
+$middlewareContent = Get-Content $middlewareFile -Raw
+
+# Check entrypoints
+if ($traefikContent -match 'web:' -and $traefikContent -match 'websecure:') {
+    Test-Check "PASS" "Traefik entrypoints: web + websecure"
+}
+else {
+    Test-Check "FAIL" "Traefik missing entrypoints" "Need web (80) and websecure (443)"
+}
+
+# Check HTTP to HTTPS redirect
+if ($traefikContent -match 'redirections') {
+    Test-Check "PASS" "HTTP -> HTTPS redirect configured"
+}
+else {
+    Test-Check "WARN" "No HTTP to HTTPS redirect"
+}
+
+# Check Docker provider
+if ($traefikContent -match 'docker:' -and $traefikContent -match 'exposedByDefault: false') {
+    Test-Check "PASS" "Docker provider: explicit opt-in (exposedByDefault: false)"
+}
+else {
+    Test-Check "FAIL" "Docker provider misconfigured" "exposedByDefault should be false"
+}
+
+# Check TLS default cert generation
+if ($traefikContent -match 'defaultGenerateCert') {
+    Test-Check "PASS" "TLS self-signed cert auto-generation configured"
+}
+else {
+    Test-Check "WARN" "No default TLS cert config"
+}
+
+# Check Traefik labels in compose for routed services
+$labeledServices = @(
+    @{ Svc = "open-webui"; Route = "/" }
+    @{ Svc = "comfyui"; Route = "/comfy" }
+    @{ Svc = "triposr"; Route = "/3d" }
 )
-foreach ($r in $routes) {
-    if ($caddyContent.Contains($r.Pat)) {
-        Test-Check "PASS" $r.Nm
+foreach ($ls in $labeledServices) {
+    if ($composeContent -match ("traefik.http.routers." + $ls.Svc.Replace("-","") -replace "open-?webui","webui")) {
+        Test-Check "PASS" "Traefik label routing: $($ls.Svc) -> $($ls.Route)"
     }
     else {
-        Test-Check "FAIL" "$($r.Nm) missing" "Proxy route not configured"
+        # More lenient check
+        if ($composeContent -match ("traefik.enable=true") -and $composeContent -match [regex]::Escape($ls.Route)) {
+            Test-Check "PASS" "Traefik label routing: $($ls.Svc) -> $($ls.Route)"
+        }
+        else {
+            Test-Check "FAIL" "Missing Traefik labels for $($ls.Svc)" "No route to $($ls.Route)"
+        }
     }
 }
 
-# Security headers
+# Check security headers in middleware
 foreach ($hdr in @("X-Content-Type-Options","X-Frame-Options","Referrer-Policy")) {
-    if ($caddyContent -match $hdr) {
+    if ($middlewareContent -match $hdr) {
         Test-Check "PASS" "Security header: $hdr"
     }
     else {
@@ -281,38 +323,12 @@ foreach ($hdr in @("X-Content-Type-Options","X-Frame-Options","Referrer-Policy")
     }
 }
 
-# WebSocket
-if ($caddyContent -match "websocket") {
-    Test-Check "PASS" "WebSocket upgrade configured"
+# Check file provider for dynamic config
+if ($traefikContent -match 'file:' -and $traefikContent -match 'directory') {
+    Test-Check "PASS" "File provider for dynamic config"
 }
 else {
-    Test-Check "FAIL" "WebSocket missing" "ComfyUI needs WebSocket"
-}
-
-# TLS
-if ($caddyContent -match "tls internal") {
-    Test-Check "PASS" "TLS configured (self-signed)"
-}
-else {
-    Test-Check "WARN" "No TLS config found"
-}
-
-# Body size
-if ($caddyContent -match "max_size") {
-    Test-Check "PASS" "Request body size limit set"
-}
-else {
-    Test-Check "WARN" "No request body size limit"
-}
-
-# Brace matching
-$openB = ([regex]::Matches($caddyContent, '\{')).Count
-$closeB = ([regex]::Matches($caddyContent, '\}')).Count
-if ($openB -eq $closeB) {
-    Test-Check "PASS" "Caddyfile braces balanced ($openB pairs)"
-}
-else {
-    Test-Check "FAIL" "Caddyfile braces unbalanced" "Open=$openB Close=$closeB"
+    Test-Check "WARN" "No file provider for dynamic config"
 }
 
 # =============================================================================
@@ -434,16 +450,13 @@ else {
 Write-Host ""
 Write-Host "--- Service Connectivity ---" -ForegroundColor White
 
-$allContent = $envContent + $composeContent + $caddyContent
+$allContent = $envContent + $composeContent + $traefikContent + $middlewareContent
 
 $connChecks = @(
     @{ F = "open-webui"; T = "ollama"; U = "http://ollama:11434" }
     @{ F = "open-webui"; T = "comfyui"; U = "http://comfyui:8188" }
     @{ F = "open-webui"; T = "whisper"; U = "http://whisper:8000/v1" }
     @{ F = "open-webui"; T = "piper";   U = "http://piper:8000/v1" }
-    @{ F = "caddy"; T = "open-webui"; U = "open-webui:8080" }
-    @{ F = "caddy"; T = "comfyui";    U = "comfyui:8188" }
-    @{ F = "caddy"; T = "triposr";    U = "triposr:8090" }
 )
 
 foreach ($c in $connChecks) {

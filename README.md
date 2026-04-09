@@ -21,7 +21,7 @@
 | **TripoSR** | Image → 3D mesh generation | 8090 | 4–6 GB |
 | **Faster-Whisper** | Speech-to-Text | 10300 | ~2 GB |
 | **Piper TTS** | Text-to-Speech | 10200 | CPU only |
-| **Caddy** | Reverse proxy + auto TLS | 80/443 | — |
+| **Traefik** | Reverse proxy + auto TLS | 80/443 | — |
 | **Portainer** | Docker management GUI | 9443 | — |
 | **Watchtower** | Auto container updates | — | — |
 
@@ -85,7 +85,8 @@ AIINIT/
 │   └── 04-TROUBLESHOOTING.md   # Common issues & fixes
 ├── docker/
 │   ├── docker-compose.yml      # Main orchestration file
-│   ├── Caddyfile               # Reverse proxy config
+│   ├── traefik.yml              # Traefik static config
+│   ├── dynamic/                 # Traefik dynamic config (middleware)
 │   └── .env                    # Environment variables
 ├── scripts/
 │   ├── bootstrap.sh            # Full VM bootstrap (drivers, docker, etc.)

@@ -1,0 +1,22 @@
+# =============================================================================
+# Traefik Dynamic Configuration — Security Headers & Middleware
+# =============================================================================
+
+http:
+  middlewares:
+    security-headers:
+      headers:
+        customResponseHeaders:
+          X-Content-Type-Options: "nosniff"
+          X-Frame-Options: "SAMEORIGIN"
+          Referrer-Policy: "strict-origin-when-cross-origin"
+          Server: ""
+        browserXssFilter: true
+        contentTypeNosniff: true
+        forceSTSHeader: true
+        stsSeconds: 31536000
+
+    # Upload size limit for image/document uploads (100 MB)
+    upload-limit:
+      buffering:
+        maxRequestBodyBytes: 104857600

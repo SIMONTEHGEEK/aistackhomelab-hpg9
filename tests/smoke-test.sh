@@ -55,7 +55,7 @@ fi
 # ---------------------------------------------------------------------------
 echo "--- Container Status ---"
 
-EXPECTED_CONTAINERS=("ollama" "open-webui" "comfyui" "triposr" "whisper" "piper" "caddy" "portainer" "watchtower")
+EXPECTED_CONTAINERS=("ollama" "open-webui" "comfyui" "triposr" "whisper" "piper" "traefik" "portainer" "watchtower")
 
 for ctr in "${EXPECTED_CONTAINERS[@]}"; do
     STATUS=$(docker inspect -f '{{.State.Status}}' "$ctr" 2>/dev/null)
@@ -145,12 +145,12 @@ else
     fail "Piper TTS not responding on :10200 (HTTP $HTTP_CODE)"
 fi
 
-# Caddy (HTTPS)
+# Traefik (HTTPS)
 HTTP_CODE=$(curl -skf -o /dev/null -w "%{http_code}" https://localhost 2>/dev/null)
 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
-    pass "Caddy HTTPS proxy responding (HTTP $HTTP_CODE)"
+    pass "Traefik HTTPS proxy responding (HTTP $HTTP_CODE)"
 else
-    fail "Caddy HTTPS not responding (HTTP $HTTP_CODE)"
+    fail "Traefik HTTPS not responding (HTTP $HTTP_CODE)"
 fi
 
 # Health endpoint
@@ -183,12 +183,12 @@ else
     fail "Open WebUI cannot reach Ollama internally"
 fi
 
-# Caddy → Open WebUI
-CONN=$(docker exec caddy wget -q -O- http://open-webui:8080 2>/dev/null | head -c 20)
+# Traefik → Open WebUI
+CONN=$(docker exec traefik wget -q -O- http://open-webui:8080 2>/dev/null | head -c 20)
 if [ -n "$CONN" ]; then
-    pass "Caddy → Open WebUI (internal network)"
+    pass "Traefik → Open WebUI (internal network)"
 else
-    warn "Caddy → Open WebUI connectivity check inconclusive"
+    warn "Traefik → Open WebUI connectivity check inconclusive"
 fi
 
 # ---------------------------------------------------------------------------

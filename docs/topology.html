@@ -79,7 +79,7 @@ graph TB
             subgraph NVIDIA["🟢 NVIDIA Runtime&lt;br/&gt;Driver 550+ | CUDA 12.x | Container Toolkit"]
                 subgraph DOCKER["🐳 Docker Compose Stack"]
 
-                    CADDY["🔒 Caddy&lt;br/&gt;Reverse Proxy&lt;br/&gt;:80 / :443&lt;br/&gt;Auto TLS"]
+                    TRAEFIK["🔒 Traefik v3&lt;br/&gt;Reverse Proxy&lt;br/&gt;:80 / :443&lt;br/&gt;Auto TLS + Native WebSocket"]
 
                     subgraph LLM["💬 Chat &amp; LLM"]
                         OLLAMA["🦙 Ollama&lt;br/&gt;Llama 3.1 / Mistral&lt;br/&gt;:11434&lt;br/&gt;GPU: ~10 GB (8B+KV+ctx)&lt;br/&gt;~14 GB (14B+KV+ctx)"]
@@ -116,10 +116,10 @@ graph TB
         end
     end
 
-    USER -->|"HTTPS :443"| CADDY
-    CADDY -->|"/"| OPENWEBUI
-    CADDY -->|"/comfy"| COMFYUI
-    CADDY -->|"/3d"| TRIPOSR
+    USER -->|"HTTPS :443"| TRAEFIK
+    TRAEFIK -->|"/"| OPENWEBUI
+    TRAEFIK -->|"/comfy"| COMFYUI
+    TRAEFIK -->|"/3d"| TRIPOSR
     USER -->|":9443"| PORTAINER
 
     OPENWEBUI -->|"LLM API"| OLLAMA
@@ -138,7 +138,7 @@ graph TB
     style MGMT fill:#2d2d2d,stroke:#666,color:#ccc
     style VRAM fill:#2a1a0e,stroke:#f0a500,color:#ffd,stroke-width:2px
     style USER fill:#e94560,stroke:#fff,color:#fff,stroke-width:2px
-    style CADDY fill:#533483,stroke:#e94560,color:#fff
+    style TRAEFIK fill:#533483,stroke:#e94560,color:#fff
     style OLLAMA fill:#2d6a4f,stroke:#40916c,color:#fff
     style OPENWEBUI fill:#2d6a4f,stroke:#40916c,color:#fff
     style COMFYUI fill:#4a1942,stroke:#832161,color:#fff

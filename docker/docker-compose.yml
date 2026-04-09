@@ -6,6 +6,24 @@
 services:
 
   # ---------------------------------------------------------------------------
+  # Traefik — Reverse Proxy with Auto-TLS & Native WebSocket Support
+  # ---------------------------------------------------------------------------
+  traefik:
+    image: traefik:v3
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./dynamic:/etc/traefik/dynamic:ro
+      - ${DATA_DIR}/traefik/certs:/certs
+    networks:
+      - ai-net
+
+  # ---------------------------------------------------------------------------
   # Ollama — LLM Inference Engine
   # ---------------------------------------------------------------------------
   ollama:
@@ -44,8 +62,6 @@ services:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     restart: unless-stopped
-    ports:
-      - "3000:8080"
     volumes:
       - ${DATA_DIR}/open-webui:/app/backend/data
     environment:
@@ -62,6 +78,13 @@ services:
       - AUDIO_TTS_ENGINE=${AUDIO_TTS_ENGINE}
       - AUDIO_TTS_OPENAI_API_BASE_URL=${AUDIO_TTS_OPENAI_API_BASE_URL}
       - AUDIO_TTS_OPENAI_API_KEY=${AUDIO_TTS_OPENAI_API_KEY}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webui.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.webui.priority=1"
+      - "traefik.http.routers.webui.entrypoints=websecure"
+      - "traefik.http.routers.webui.tls=true"
+      - "traefik.http.services.webui.loadbalancer.server.port=8080"
     depends_on:
       ollama:
         condition: service_healthy
@@ -75,8 +98,6 @@ services:
     image: ghcr.io/ai-dock/comfyui:latest-cuda
     container_name: comfyui
     restart: unless-stopped
-    ports:
-      - "8188:8188"
     volumes:
       - ${DATA_DIR}/comfyui/models:/opt/ComfyUI/models
       - ${DATA_DIR}/comfyui/output:/opt/ComfyUI/output
@@ -85,6 +106,15 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - CLI_ARGS=--listen 0.0.0.0 --port 8188
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.comfyui.rule=PathPrefix(`/comfy`)"
+      - "traefik.http.routers.comfyui.priority=10"
+      - "traefik.http.routers.comfyui.entrypoints=websecure"
+      - "traefik.http.routers.comfyui.tls=true"
+      - "traefik.http.middlewares.comfy-strip.stripprefix.prefixes=/comfy"
+      - "traefik.http.routers.comfyui.middlewares=comfy-strip"
+      - "traefik.http.services.comfyui.loadbalancer.server.port=8188"
     deploy:
       resources:
         reservations:
@@ -104,13 +134,20 @@ services:
       dockerfile: Dockerfile.triposr
     container_name: triposr
     restart: unless-stopped
-    ports:
-      - "8090:8090"
     volumes:
       - ${DATA_DIR}/triposr/output:/app/output
       - ${DATA_DIR}/triposr/input:/app/input
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.triposr.rule=PathPrefix(`/3d`)"
+      - "traefik.http.routers.triposr.priority=10"
+      - "traefik.http.routers.triposr.entrypoints=websecure"
+      - "traefik.http.routers.triposr.tls=true"
+      - "traefik.http.middlewares.triposr-strip.stripprefix.prefixes=/3d"
+      - "traefik.http.routers.triposr.middlewares=triposr-strip"
+      - "traefik.http.services.triposr.loadbalancer.server.port=8090"
     deploy:
       resources:
         reservations:
@@ -156,27 +193,6 @@ services:
       - "10200:8000"
     volumes:
       - ${DATA_DIR}/piper:/app/voices
-    networks:
-      - ai-net
-
-  # ---------------------------------------------------------------------------
-  # Caddy — Reverse Proxy with Auto-TLS
-  # ---------------------------------------------------------------------------
-  caddy:
-    image: caddy:2-alpine
-    container_name: caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ${DATA_DIR}/caddy/data:/data
-      - ${DATA_DIR}/caddy/config:/config
-    depends_on:
-      - open-webui
-      - comfyui
     networks:
       - ai-net
 

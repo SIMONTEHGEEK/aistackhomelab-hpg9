@@ -155,7 +155,7 @@ docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi > /dev
 info "Step 6/7: Creating data directories..."
 ACTUAL_USER="${SUDO_USER:-$USER}"
 
-mkdir -p "${DATA_DIR}"/{ollama,open-webui,comfyui/{models/checkpoints,models/loras,models/controlnet,models/vae,models/clip,output,input,custom_nodes},triposr/{input,output},whisper,piper,caddy/{data,config},portainer}
+mkdir -p "${DATA_DIR}"/{ollama,open-webui,comfyui/{models/checkpoints,models/loras,models/controlnet,models/vae,models/clip,output,input,custom_nodes},triposr/{input,output},whisper,piper,traefik/certs,portainer}
 
 chown -R "${ACTUAL_USER}:${ACTUAL_USER}" "${DATA_DIR}"
 

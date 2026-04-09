@@ -3,7 +3,7 @@
 ## Architecture
 
 All services run as Docker containers orchestrated by Docker Compose.
-A Caddy reverse proxy provides HTTPS and path-based routing.
+A Traefik reverse proxy provides HTTPS and path-based routing with native WebSocket support.
 
 ## Service Details
 
@@ -62,11 +62,11 @@ A Caddy reverse proxy provides HTTPS and path-based routing.
 - **Why**: Runs on CPU, low latency, many voice options
 - **Integration**: Connected to Open WebUI for voice responses
 
-### 7. Caddy — Reverse Proxy
+### 7. Traefik — Reverse Proxy
 
-- **What**: Modern web server with automatic HTTPS
-- **Why**: Zero-config TLS, simple configuration, HTTP/2
-- **Routes**:
+- **What**: Cloud-native reverse proxy with automatic HTTPS
+- **Why**: Native WebSocket support (critical for ComfyUI/Gradio), Docker label-based routing, built-in dashboard
+- **Routes** (configured via Docker labels):
   - `/` → Open WebUI (chat)
   - `/comfy/*` → ComfyUI
   - `/3d/*` → TripoSR
@@ -98,7 +98,7 @@ Internet (optional)
     │  │ ai-server VM   │  │
     │  │ 192.168.x.xxx  │  │
     │  │                │  │
-    │  │ :443  → Caddy  │  │
+    │  │ :443  → Traefik│  │
     │  │ :9443 → Portnr │  │
     │  └────────────────┘  │
     └──────────────────────┘
@@ -117,7 +117,7 @@ All data is stored in Docker volumes mapped to host directories:
 | `~/ai-data/triposr/` | 3D model outputs | Variable |
 | `~/ai-data/whisper/` | Whisper model cache | ~3 GB |
 | `~/ai-data/piper/` | TTS voice models | ~1 GB |
-| `~/ai-data/caddy/` | TLS certs, config | <1 MB |
+| `~/ai-data/traefik/` | TLS certs | <1 MB |
 | `~/ai-data/portainer/` | Portainer data | <100 MB |
 
 **Total estimated storage**: 50–300 GB (well within the 500 GB VM disk)

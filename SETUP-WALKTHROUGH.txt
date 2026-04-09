@@ -344,7 +344,7 @@ STEP 5.3 — Test voice
 
   In Open WebUI:
     1. Click the microphone icon in the chat input
-    2. Allow microphone access (requires HTTPS — which Caddy provides)
+    2. Allow microphone access (requires HTTPS — which Traefik provides)
     3. Speak your message
     4. Whisper transcribes it → LLM responds → Piper reads it back
 

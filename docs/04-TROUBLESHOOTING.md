@@ -90,13 +90,13 @@ Models must be placed in the correct directory:
 - Pre-process images with background removal before feeding to TripoSR
 - Output mesh may need cleanup in Blender/MeshLab
 
-## Network / Caddy Issues
+## Network / Traefik Issues
 
 ### Can't access web interfaces
 
 ```bash
-# Check Caddy is running
-docker compose logs caddy
+# Check Traefik is running
+docker compose logs traefik
 
 # Verify ports are open
 sudo ss -tlnp | grep -E '80|443|9443'
@@ -107,9 +107,9 @@ curl -k https://localhost
 
 ### Self-signed certificate warnings
 
-Caddy auto-generates certificates. For local network access without warnings:
-- Use Caddy's `tls internal` directive (already configured)
-- Import the Caddy root CA into your browser/OS
+Traefik auto-generates a default self-signed certificate. For local network access without warnings:
+- Export Traefik's default cert and import into your browser/OS trust store
+- Or configure a real domain with Let's Encrypt ACME in traefik.yml
 
 ## Performance Tips
 
